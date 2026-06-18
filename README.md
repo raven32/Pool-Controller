@@ -1,3 +1,54 @@
+# Pool-Controller-SAE
+
+This project is a fork of the excellent Pool-Controller project created by FreezerEagle:
+
+https://github.com/freezereagle/Pool-Controller
+
+The original project provides ESPHome-based RS485 control and monitoring for Pentair IntelliFlo pool pumps. This fork focuses on North American (SAE) units, enhanced pump control capabilities, and advanced pool automation features while maintaining compatibility with the original project architecture.
+
+## Credits
+
+Original Project Author:
+- FreezerEagle
+- https://github.com/freezereagle
+
+Original Repository:
+- https://github.com/freezereagle/Pool-Controller
+
+Many thanks to FreezerEagle for developing and publishing the original Pentair IntelliFlo ESPHome integration that made this project possible.
+
+## Goals of This Fork
+
+### Unit Conversion Improvements
+- Native PSI pressure reporting
+- Native GPM flow reporting
+- Removal of unnecessary metric conversions
+
+### Pump Control Enhancements
+- GPM-based pump control
+- RPM-based pump control
+- External control keepalive support
+- Enhanced IntelliFlo VSF integration
+
+### Pool Automation Features
+- Cleaner valve automation
+- Pressure-based cleaner monitoring
+- Water temperature monitoring
+- Air temperature monitoring
+- Freeze protection automation
+- Home Assistant integration
+
+### Future Development
+- ORP monitoring
+- pH monitoring
+- Chlorine monitoring
+- Filter performance analysis
+- Pressure-based flow optimization
+- Automated cleaner pressure regulation
+- Advanced scheduling and control logic
+
+
+
 # Pool Controller Project
 
 A complete ESPHome-based pool automation platform that integrates custom hardware components, management tools, and a modern web dashboard for controlling and monitoring pool equipment.
