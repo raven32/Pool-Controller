@@ -23,6 +23,7 @@ DEVICE_MODES = {
 
 CONF_PENTAIR_IF_IC_ID = "pentair_if_ic_id"
 CONF_DEVICE_MODE = "device_mode"
+CONF_USE_SAE_UNITS = "use_sae_units"
 
 CONFIG_SCHEMA = cv.Schema(
     {
@@ -31,6 +32,9 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_DEVICE_MODE, default="pump_and_chlorinator"): cv.enum(
             DEVICE_MODES, lower=True
         ),
+        # Backward-compatible unit selector for the legacy flow/pressure sensors.
+        # Preferred new YAML is to call flow_gpm / pressure_psi directly.
+        cv.Optional(CONF_USE_SAE_UNITS, default=False): cv.boolean,
     }
 ).extend(uart.UART_DEVICE_SCHEMA).extend(cv.polling_component_schema("30s"))
 
@@ -51,6 +55,7 @@ async def to_code(config):
     await uart.register_uart_device(var, config)
 
     cg.add(var.set_device_mode(config[CONF_DEVICE_MODE]))
+    cg.add(var.set_use_sae_units(config[CONF_USE_SAE_UNITS]))
 
     if CONF_FLOW_CONTROL_PIN in config:
         pin = await gpio_pin_expression(config[CONF_FLOW_CONTROL_PIN])

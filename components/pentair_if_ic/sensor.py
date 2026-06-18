@@ -22,10 +22,10 @@ DEPENDENCIES = ["pentair_if_ic"]
 # IntelliFlo sensors
 CONF_POWER = "power"
 CONF_RPM = "rpm"
-CONF_FLOW = "flow"              # Legacy metric m³/h sensor
-CONF_FLOW_GPM = "flow_gpm"      # Native SAE GPM sensor
-CONF_PRESSURE = "pressure"      # Legacy metric bar sensor
-CONF_PRESSURE_PSI = "pressure_psi"  # Native SAE PSI sensor
+CONF_FLOW = "flow"                    # Legacy configurable output; metric unless use_sae_units=true
+CONF_FLOW_GPM = "flow_gpm"            # Native SAE GPM sensor
+CONF_PRESSURE = "pressure"            # Legacy configurable output; metric unless use_sae_units=true
+CONF_PRESSURE_PSI = "pressure_psi"    # Native SAE PSI sensor
 CONF_TIME_REMAINING = "time_remaining"
 CONF_CLOCK = "clock"
 

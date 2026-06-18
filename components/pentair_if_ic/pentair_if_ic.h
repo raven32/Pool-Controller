@@ -11,6 +11,9 @@
 #include "esphome/core/automation.h"
 #include "esphome/core/helpers.h"
 #include <queue>
+#include <tuple>
+#include <vector>
+#include <string>
 
 namespace esphome {
 namespace pentair_if_ic {
@@ -74,14 +77,14 @@ class PentairIfIcComponent : public PollingComponent, public uart::UARTDevice {
   void dump_config() override;
   void loop() override;
   void update() override;
-  
+
   // IntelliChlor methods
   void read_all_chlorinator_info();
   void read_all_info() { read_all_chlorinator_info(); }  // Alias for compatibility
   void refresh_chlorinator();  // Force immediate refresh, bypassing rate limiting
   void set_swg_percent();
   void set_takeover_mode(bool enable);
-  
+
   // IntelliFlo methods
   void requestPumpStatus();
   void run();
@@ -90,7 +93,7 @@ class PentairIfIcComponent : public PollingComponent, public uart::UARTDevice {
   void commandExternalProgram(int prog);
   void saveValueForProgram(int prog, int value);
   void commandRPM(int rpm);
-  void commandFlow(int flow);  // Backward-compatible alias for commandGPM()
+  void commandFlow(int flow);  // Backward-compatible wrapper for commandGPM()
   void commandGPM(int gpm);
   void pumpToLocalControl();
   void pumpToRemoteControl();
@@ -98,14 +101,15 @@ class PentairIfIcComponent : public PollingComponent, public uart::UARTDevice {
 
   void set_flow_control_pin(GPIOPin *flow_control_pin) { this->flow_control_pin_ = flow_control_pin; }
   void set_device_mode(PentairDeviceMode mode) { this->device_mode_ = mode; }
+  void set_use_sae_units(bool use_sae_units) { this->use_sae_units_ = use_sae_units; }
 
   // IntelliFlo sensor setters
   void set_if_power(sensor::Sensor *sensor) { if_power_ = sensor; }
   void set_if_rpm(sensor::Sensor *sensor) { if_rpm_ = sensor; }
-  void set_if_flow(sensor::Sensor *sensor) { if_flow_ = sensor; }  // Metric m³/h legacy sensor
-  void set_if_flow_gpm(sensor::Sensor *sensor) { if_flow_gpm_ = sensor; }  // Native SAE GPM sensor
-  void set_if_pressure(sensor::Sensor *sensor) { if_pressure_ = sensor; }  // Metric bar legacy sensor
-  void set_if_pressure_psi(sensor::Sensor *sensor) { if_pressure_psi_ = sensor; }  // Native SAE PSI sensor
+  void set_if_flow(sensor::Sensor *sensor) { if_flow_ = sensor; }                 // Legacy flow sensor
+  void set_if_flow_gpm(sensor::Sensor *sensor) { if_flow_gpm_ = sensor; }         // Native GPM sensor
+  void set_if_pressure(sensor::Sensor *sensor) { if_pressure_ = sensor; }         // Legacy pressure sensor
+  void set_if_pressure_psi(sensor::Sensor *sensor) { if_pressure_psi_ = sensor; } // Native PSI sensor
   void set_if_time_remaining(sensor::Sensor *sensor) { if_time_remaining_ = sensor; }
   void set_if_clock(sensor::Sensor *sensor) { if_clock_ = sensor; }
   void set_if_running(binary_sensor::BinarySensor *sensor) { if_running_ = sensor; }
@@ -114,12 +118,13 @@ class PentairIfIcComponent : public PollingComponent, public uart::UARTDevice {
  protected:
   GPIOPin *flow_control_pin_{nullptr};
   PentairDeviceMode device_mode_{DEVICE_MODE_PUMP_AND_CHLORINATOR};
-  
+  bool use_sae_units_{false};
+
   // Common receive buffer
   std::vector<uint8_t> rx_buffer_;
   uint32_t last_received_byte_millis_ = 0;
   uint32_t last_tx_millis_ = 0;  // Track last transmission time for bus arbitration
-  
+
   // IntelliChlor specific
   void get_ic_version_();
   void get_ic_temp_();
@@ -128,29 +133,28 @@ class PentairIfIcComponent : public PollingComponent, public uart::UARTDevice {
   void ic_set_percent_(uint8_t percent);
   void send_ic_command_(const uint8_t *command, int command_len, uint8_t retries);
   bool parse_ic_packet_();
-  
-  // Packet type enumeration
+
   enum PacketType : uint8_t {
     PACKET_TYPE_IF = 0,
     PACKET_TYPE_IC = 1
   };
-  
+
   // Unified send queue: <type, retries, attempts, data>
   std::queue<std::tuple<PacketType, uint8_t, uint8_t, std::vector<uint8_t>>> tx_queue_;
-  
+
   uint32_t ic_last_command_timestamp_;
   uint32_t ic_last_recv_timestamp_;
   uint32_t ic_last_loop_timestamp_;
   uint8_t ic_last_set_percent_ = 0;
   bool ic_run_again_;
   std::string ic_version_;
-  
+
   // IntelliFlo specific
   void parse_if_packet_(const std::vector<uint8_t> &data);
   bool validate_if_received_message_();
   void queue_if_packet_(uint8_t message[], int messageLength);
   const char *device_mode_to_string_() const;
-  
+
   sensor::Sensor *if_power_{nullptr};
   sensor::Sensor *if_rpm_{nullptr};
   sensor::Sensor *if_flow_{nullptr};
@@ -162,7 +166,6 @@ class PentairIfIcComponent : public PollingComponent, public uart::UARTDevice {
   binary_sensor::BinarySensor *if_running_{nullptr};
   text_sensor::TextSensor *if_program_{nullptr};
 
-  // Helper method
   template<typename... Args>
   std::string string_format_(const std::string &format, Args... args);
 };
