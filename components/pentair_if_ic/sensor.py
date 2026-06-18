@@ -22,8 +22,10 @@ DEPENDENCIES = ["pentair_if_ic"]
 # IntelliFlo sensors
 CONF_POWER = "power"
 CONF_RPM = "rpm"
-CONF_FLOW = "flow"
-CONF_PRESSURE = "pressure"
+CONF_FLOW = "flow"              # Legacy metric m³/h sensor
+CONF_FLOW_GPM = "flow_gpm"      # Native SAE GPM sensor
+CONF_PRESSURE = "pressure"      # Legacy metric bar sensor
+CONF_PRESSURE_PSI = "pressure_psi"  # Native SAE PSI sensor
 CONF_TIME_REMAINING = "time_remaining"
 CONF_CLOCK = "clock"
 
@@ -37,6 +39,7 @@ CONF_SET_PERCENT = "set_percent"
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(CONF_PENTAIR_IF_IC_ID): cv.use_id(PentairIfIcComponent),
+
         # IntelliFlo sensors
         cv.Optional(CONF_POWER): sensor.sensor_schema(
             unit_of_measurement=UNIT_WATT,
@@ -52,9 +55,19 @@ CONFIG_SCHEMA = cv.Schema(
             accuracy_decimals=2,
             device_class=DEVICE_CLASS_VOLUME_FLOW_RATE,
         ),
+        cv.Optional(CONF_FLOW_GPM): sensor.sensor_schema(
+            unit_of_measurement="GPM",
+            accuracy_decimals=0,
+            device_class=DEVICE_CLASS_VOLUME_FLOW_RATE,
+        ),
         cv.Optional(CONF_PRESSURE): sensor.sensor_schema(
             unit_of_measurement="bar",
             accuracy_decimals=3,
+            device_class=DEVICE_CLASS_PRESSURE,
+        ),
+        cv.Optional(CONF_PRESSURE_PSI): sensor.sensor_schema(
+            unit_of_measurement="psi",
+            accuracy_decimals=0,
             device_class=DEVICE_CLASS_PRESSURE,
         ),
         cv.Optional(CONF_TIME_REMAINING): sensor.sensor_schema(
@@ -67,6 +80,7 @@ CONFIG_SCHEMA = cv.Schema(
             accuracy_decimals=0,
             device_class=DEVICE_CLASS_DURATION,
         ),
+
         # IntelliChlor sensors
         cv.Optional(CONF_SALT_PPM): sensor.sensor_schema(
             device_class=DEVICE_CLASS_VOLATILE_ORGANIC_COMPOUNDS_PARTS,
@@ -84,52 +98,48 @@ CONFIG_SCHEMA = cv.Schema(
     }
 )
 
-
 async def to_code(config):
     var = await cg.get_variable(config[CONF_PENTAIR_IF_IC_ID])
-    
+
     # IntelliFlo sensors
     if power_config := config.get(CONF_POWER):
         sens = await sensor.new_sensor(power_config)
         cg.add(var.set_if_power(sens))
-    
     if rpm_config := config.get(CONF_RPM):
         sens = await sensor.new_sensor(rpm_config)
         cg.add(var.set_if_rpm(sens))
-    
     if flow_config := config.get(CONF_FLOW):
         sens = await sensor.new_sensor(flow_config)
         cg.add(var.set_if_flow(sens))
-    
+    if flow_gpm_config := config.get(CONF_FLOW_GPM):
+        sens = await sensor.new_sensor(flow_gpm_config)
+        cg.add(var.set_if_flow_gpm(sens))
     if pressure_config := config.get(CONF_PRESSURE):
         sens = await sensor.new_sensor(pressure_config)
         cg.add(var.set_if_pressure(sens))
-    
+    if pressure_psi_config := config.get(CONF_PRESSURE_PSI):
+        sens = await sensor.new_sensor(pressure_psi_config)
+        cg.add(var.set_if_pressure_psi(sens))
     if time_remaining_config := config.get(CONF_TIME_REMAINING):
         sens = await sensor.new_sensor(time_remaining_config)
         cg.add(var.set_if_time_remaining(sens))
-    
     if clock_config := config.get(CONF_CLOCK):
         sens = await sensor.new_sensor(clock_config)
         cg.add(var.set_if_clock(sens))
-    
+
     # IntelliChlor sensors
     if salt_ppm_config := config.get(CONF_SALT_PPM):
         sens = await sensor.new_sensor(salt_ppm_config)
         cg.add(var.set_salt_ppm_sensor(sens))
-    
     if temp_config := config.get(CONF_WATER_TEMP):
         sens = await sensor.new_sensor(temp_config)
         cg.add(var.set_water_temp_sensor(sens))
-    
     if status_config := config.get(CONF_STATUS):
         sens = await sensor.new_sensor(status_config)
         cg.add(var.set_ic_status_sensor(sens))
-    
     if error_config := config.get(CONF_ERROR):
         sens = await sensor.new_sensor(error_config)
         cg.add(var.set_ic_error_sensor(sens))
-    
     if set_percent_config := config.get(CONF_SET_PERCENT):
         sens = await sensor.new_sensor(set_percent_config)
         cg.add(var.set_set_percent_sensor(sens))

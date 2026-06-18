@@ -43,6 +43,12 @@ enum program : uint8_t {
   UNKNOWN = 0xFF,
 };
 
+enum PentairDeviceMode : uint8_t {
+  DEVICE_MODE_PUMP_ONLY = 0,
+  DEVICE_MODE_CHLORINATOR_ONLY = 1,
+  DEVICE_MODE_PUMP_AND_CHLORINATOR = 2,
+};
+
 class PentairIfIcComponent : public PollingComponent, public uart::UARTDevice {
   // IntelliChlor sensors
   SUB_TEXT_SENSOR(ic_version)
@@ -84,18 +90,22 @@ class PentairIfIcComponent : public PollingComponent, public uart::UARTDevice {
   void commandExternalProgram(int prog);
   void saveValueForProgram(int prog, int value);
   void commandRPM(int rpm);
-  void commandFlow(int flow);
+  void commandFlow(int flow);  // Backward-compatible alias for commandGPM()
+  void commandGPM(int gpm);
   void pumpToLocalControl();
   void pumpToRemoteControl();
   void setPumpClock(int hour, int minute);
 
   void set_flow_control_pin(GPIOPin *flow_control_pin) { this->flow_control_pin_ = flow_control_pin; }
+  void set_device_mode(PentairDeviceMode mode) { this->device_mode_ = mode; }
 
   // IntelliFlo sensor setters
   void set_if_power(sensor::Sensor *sensor) { if_power_ = sensor; }
   void set_if_rpm(sensor::Sensor *sensor) { if_rpm_ = sensor; }
-  void set_if_flow(sensor::Sensor *sensor) { if_flow_ = sensor; }
-  void set_if_pressure(sensor::Sensor *sensor) { if_pressure_ = sensor; }
+  void set_if_flow(sensor::Sensor *sensor) { if_flow_ = sensor; }  // Metric m³/h legacy sensor
+  void set_if_flow_gpm(sensor::Sensor *sensor) { if_flow_gpm_ = sensor; }  // Native SAE GPM sensor
+  void set_if_pressure(sensor::Sensor *sensor) { if_pressure_ = sensor; }  // Metric bar legacy sensor
+  void set_if_pressure_psi(sensor::Sensor *sensor) { if_pressure_psi_ = sensor; }  // Native SAE PSI sensor
   void set_if_time_remaining(sensor::Sensor *sensor) { if_time_remaining_ = sensor; }
   void set_if_clock(sensor::Sensor *sensor) { if_clock_ = sensor; }
   void set_if_running(binary_sensor::BinarySensor *sensor) { if_running_ = sensor; }
@@ -103,6 +113,7 @@ class PentairIfIcComponent : public PollingComponent, public uart::UARTDevice {
 
  protected:
   GPIOPin *flow_control_pin_{nullptr};
+  PentairDeviceMode device_mode_{DEVICE_MODE_PUMP_AND_CHLORINATOR};
   
   // Common receive buffer
   std::vector<uint8_t> rx_buffer_;
@@ -138,11 +149,14 @@ class PentairIfIcComponent : public PollingComponent, public uart::UARTDevice {
   void parse_if_packet_(const std::vector<uint8_t> &data);
   bool validate_if_received_message_();
   void queue_if_packet_(uint8_t message[], int messageLength);
+  const char *device_mode_to_string_() const;
   
   sensor::Sensor *if_power_{nullptr};
   sensor::Sensor *if_rpm_{nullptr};
   sensor::Sensor *if_flow_{nullptr};
+  sensor::Sensor *if_flow_gpm_{nullptr};
   sensor::Sensor *if_pressure_{nullptr};
+  sensor::Sensor *if_pressure_psi_{nullptr};
   sensor::Sensor *if_time_remaining_{nullptr};
   sensor::Sensor *if_clock_{nullptr};
   binary_sensor::BinarySensor *if_running_{nullptr};

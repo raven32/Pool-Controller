@@ -1,6 +1,7 @@
 #include "pentair_if_ic.h"
 #include "esphome/core/log.h"
 #include <cinttypes>
+#include <cmath>
 
 namespace esphome {
 namespace pentair_if_ic {
@@ -9,10 +10,16 @@ static const char *TAG = "pentair_if_ic";
 
 void PentairIfIcComponent::setup() {
   ESP_LOGCONFIG(TAG, "Setting up Pentair IntelliFlo + IntelliChlor...");
+  ESP_LOGCONFIG(TAG, "Device mode: %s", this->device_mode_to_string_());
   
-  // Initialize IntelliChlor
-  this->read_all_chlorinator_info();
-  ESP_LOGCONFIG(TAG, "IntelliChlor Version: %s", this->ic_version_.c_str());
+  // Initialize IntelliChlor only when enabled for this installation.
+  if (this->device_mode_ == DEVICE_MODE_CHLORINATOR_ONLY ||
+      this->device_mode_ == DEVICE_MODE_PUMP_AND_CHLORINATOR) {
+    this->read_all_chlorinator_info();
+    ESP_LOGCONFIG(TAG, "IntelliChlor Version: %s", this->ic_version_.c_str());
+  } else {
+    ESP_LOGCONFIG(TAG, "IntelliChlor polling disabled by device_mode");
+  }
   
   if (this->flow_control_pin_ != nullptr) {
     ESP_LOGCONFIG(TAG, "Using Flow Control");
@@ -27,6 +34,7 @@ void PentairIfIcComponent::setup() {
 
 void PentairIfIcComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "Pentair IntelliFlo + IntelliChlor RS485 Component");
+  ESP_LOGCONFIG(TAG, "  Device mode: %s", this->device_mode_to_string_());
   
   // IntelliChlor sensors
   LOG_TEXT_SENSOR("  ", "IC_VersionTextSensor", this->ic_version_text_sensor_);
@@ -40,6 +48,8 @@ void PentairIfIcComponent::dump_config() {
   // IntelliFlo sensors
   LOG_SENSOR("  ", "IF_PowerSensor", this->if_power_);
   LOG_SENSOR("  ", "IF_RPMSensor", this->if_rpm_);
+  LOG_SENSOR("  ", "IF_FlowGPM", this->if_flow_gpm_);
+  LOG_SENSOR("  ", "IF_PressurePSI", this->if_pressure_psi_);
   LOG_BINARY_SENSOR("  ", "IF_RunningBinarySensor", this->if_running_);
   LOG_TEXT_SENSOR("  ", "IF_ProgramTextSensor", this->if_program_);
   
@@ -157,14 +167,20 @@ void PentairIfIcComponent::loop() {
 }
 
 void PentairIfIcComponent::update() {
-  // Poll both devices - IC first, IF after a delay
-  this->read_all_chlorinator_info();
+  // Poll only the devices enabled in YAML to reduce RS485 bus traffic.
+  if (this->device_mode_ == DEVICE_MODE_CHLORINATOR_ONLY ||
+      this->device_mode_ == DEVICE_MODE_PUMP_AND_CHLORINATOR) {
+    this->read_all_chlorinator_info();
+  }
   
-  // Delay IF requests to avoid collision with IC packets
-  this->set_timeout(500, [this]() {
-    this->requestPumpStatus();
-    this->pumpToLocalControl();
-  });
+  if (this->device_mode_ == DEVICE_MODE_PUMP_ONLY ||
+      this->device_mode_ == DEVICE_MODE_PUMP_AND_CHLORINATOR) {
+    // Delay IF requests to avoid collision with IC packets when both devices are enabled.
+    this->set_timeout(500, [this]() {
+      this->requestPumpStatus();
+      this->pumpToLocalControl();
+    });
+  }
 }
 
 // ========================================
@@ -495,10 +511,22 @@ void PentairIfIcComponent::parse_if_packet_(const std::vector<uint8_t> &data) {
       this->if_power_->publish_state((data[9] * 256) + data[10]);
     if (this->if_rpm_ != nullptr)
       this->if_rpm_->publish_state((data[11] * 256) + data[12]);
+
+    // IntelliFlo status packets report flow and pressure in native SAE units.
+    // Keep the original metric sensors for backward compatibility and also expose native SAE sensors.
+    const float flow_gpm = data[13];
+    const float pressure_psi = data[14];
+
     if (this->if_flow_ != nullptr)
-      this->if_flow_->publish_state(data[13] * 0.227);
+      this->if_flow_->publish_state(flow_gpm * 0.2271247f);  // GPM -> m³/h
+    if (this->if_flow_gpm_ != nullptr)
+      this->if_flow_gpm_->publish_state(flow_gpm);
+
     if (this->if_pressure_ != nullptr)
-      this->if_pressure_->publish_state(data[14] / 14.504);
+      this->if_pressure_->publish_state(pressure_psi / 14.5038f);  // PSI -> bar
+    if (this->if_pressure_psi_ != nullptr)
+      this->if_pressure_psi_->publish_state(pressure_psi);
+
     if (this->if_time_remaining_ != nullptr)
       this->if_time_remaining_->publish_state(data[17] * 60 + data[18]);
     if (this->if_clock_ != nullptr)
@@ -579,9 +607,17 @@ void PentairIfIcComponent::commandRPM(int rpm) {
 }
 
 void PentairIfIcComponent::commandFlow(int flow) {
-  ESP_LOGI(TAG, "IF Command Flow: %.1f m3/h", ((double) flow) / 10);
+  // Backward-compatible wrapper. The pump command byte appears to use native GPM.
+  this->commandGPM(flow);
+}
+
+void PentairIfIcComponent::commandGPM(int gpm) {
+  if (gpm < 0) gpm = 0;
+  if (gpm > 255) gpm = 255;
+
+  ESP_LOGI(TAG, "IF Command GPM: %d gpm", gpm);
   uint8_t pumpPowerPacket[] = {0xA5, 0x00, 0x60, 0x10, 0x09, 0x04, 0x02, 0xC4, 0x00, 0};
-  pumpPowerPacket[9] = flow;
+  pumpPowerPacket[9] = static_cast<uint8_t>(gpm);
   queue_if_packet_(pumpPowerPacket, 10);
 }
 
@@ -612,6 +648,19 @@ void PentairIfIcComponent::queue_if_packet_(uint8_t message[], int messageLength
     ESP_LOGW(TAG, "IF Asking to queue malformed packet");
   } else {
     this->tx_queue_.push(std::make_tuple(PACKET_TYPE_IF, (uint8_t)0, (uint8_t)0, packet));
+  }
+}
+
+const char *PentairIfIcComponent::device_mode_to_string_() const {
+  switch (this->device_mode_) {
+    case DEVICE_MODE_PUMP_ONLY:
+      return "pump_only";
+    case DEVICE_MODE_CHLORINATOR_ONLY:
+      return "chlorinator_only";
+    case DEVICE_MODE_PUMP_AND_CHLORINATOR:
+      return "pump_and_chlorinator";
+    default:
+      return "unknown";
   }
 }
 
